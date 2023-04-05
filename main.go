@@ -3,17 +3,21 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/notnil/chess"
+	"github.com/dylhunn/dragontoothmg"
 )
 
 var scanner *bufio.Scanner = bufio.NewScanner(os.Stdin)
 
-func Input() string {
+type eval_result struct {
+	best_move dragontoothmg.Move
+}
+
+var result eval_result = eval_result{}
+
+func input() string {
 	if scanner.Scan() {
 		line := scanner.Text()
 		return line
@@ -21,71 +25,111 @@ func Input() string {
 	return ""
 }
 
-func pass() {
+func draw_board(fen string) {
+	board := strings.Split(strings.Split(fen, " ")[0], "/")
+	for _, s := range board {
+		for _, x := range strings.Split(s, "") {
+			switch x {
+			case "1":
+				fmt.Print(".")
+			case "2":
+				fmt.Print("..")
+			case "3":
+				fmt.Print("...")
+			case "4":
+				fmt.Print("....")
+			case "5":
+				fmt.Print(".....")
+			case "6":
+				fmt.Print("......")
+			case "7":
+				fmt.Print(".......")
+			case "8":
+				fmt.Print("........")
+			default:
+				fmt.Print(x)
+			}
+		}
+		fmt.Println()
+	}
+}
 
+func evaluate(board dragontoothmg.Board) int {
+	eval := 0
+	eval_board := strings.Split(strings.Split(board.ToFen(), " ")[0], "/")
+	for _, s := range eval_board {
+		for _, x := range strings.Split(s, "") {
+			switch x {
+			case "R":
+				eval += 5
+			case "N":
+				eval += 3
+			case "B":
+				eval += 3
+			case "Q":
+				eval += 9
+			case "P":
+				eval += 1
+			case "r":
+				eval -= 5
+			case "n":
+				eval -= 3
+			case "b":
+				eval -= 3
+			case "q":
+				eval -= 9
+			case "p":
+				eval -= 1
+			}
+		}
+	}
+	if board.Wtomove {
+		return eval
+	} else {
+		return -eval
+	}
+}
+
+func search(depth int, board dragontoothmg.Board, depth_from_root int, alpha int, beta int) int {
+	if depth == 0 {
+		return evaluate(board)
+	}
+	legal_moves := board.GenerateLegalMoves()
+	if len(legal_moves) == 0 {
+		if board.OurKingInCheck() {
+			return -1000 - depth
+		}
+		return 0
+	}
+
+	for _, move := range legal_moves {
+		undo := board.Apply(move)
+		eval := -search(depth-1, board, depth_from_root+1, -beta, -alpha)
+		undo()
+		if eval > alpha {
+			alpha = eval
+			if depth_from_root == 0 {
+				result.best_move = move
+			}
+		}
+
+		if eval >= beta {
+			return beta
+		}
+
+	}
+	return alpha
 }
 
 func main() {
-	rand.Seed(time.Now().Unix())
-	game := chess.NewGame(chess.UseNotation(chess.UCINotation{}))
-
-	input := Input()
-	if !(input == "uci" || input == "gui") {
-		fmt.Println("no.")
-		os.Exit(1)
-	}
-
-	if input == "gui" {
-		game.MoveStr("e2e4")
-		game.MoveStr("e7e5")
-		fmt.Println(game.Position().Board().Draw())
-
-		os.Exit(0)
-	}
-
-	fmt.Println("uciok")
+	board := dragontoothmg.ParseFen("8/2rnk1BP/3p2B1/8/5p2/5P2/ppPN1P2/1K6 w - - 0 37")
 	for {
-		input = Input()
-
-		tokens := strings.Split(input, " ")
-		command := tokens[0]
-
-		switch command {
-		case "quit":
-			os.Exit(0)
-		case "stop":
-			moves := game.ValidMoves()
-			move := moves[rand.Intn(len(moves))]
-			fmt.Print("bestmove ")
-			fmt.Println(move)
-			game.Move(move)
-		case "position":
-			if tokens[1] == "startpos" {
-				game = chess.NewGame(chess.UseNotation(chess.UCINotation{}))
-
-				if len(tokens) > 3 && tokens[2] == "moves" {
-					moves := tokens[3:]
-					for i := 0; i < len(moves); i++ {
-						game.MoveStr(moves[i])
-					}
-				}
-			} else if tokens[1] == "fen" {
-				fen, _ := chess.FEN(strings.Join(tokens[2:], " "))
-				game = chess.NewGame(fen, chess.UseNotation(chess.UCINotation{}))
-				if len(tokens) > 4 && tokens[3] == "moves" {
-					moves := tokens[4:]
-					for i := 0; i < len(moves); i++ {
-						game.MoveStr(moves[i])
-					}
-				}
-			}
-		case "go":
-		case "isready":
-			fmt.Println("readyok")
-		default:
-			fmt.Println("awiohgweiohioghweioheg")
-			os.Exit(1)
-		}
-		// fmt.Println(game.Position().Board().Draw())
+		move, _ := dragontoothmg.ParseMove(input())
+		board.Apply(move)
+		draw_board(board.ToFen())
+		search(5, board, 0, -1000000, 1000000)
+		board.Apply(result.best_move)
+		draw_board(board.ToFen())
+		fmt.Println(result.best_move.String())
 	}
 }
